@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""BGP route policy lab 自動測試。
+"""BGP route policy lab 自动测试。
 
 用法:
-    ./test_lab.py              啟動環境、依序執行所有情境、輸出 PASS/FAIL(任一 FAIL 則 exit 1)
-    ./test_lab.py --keep       測試後保留容器(預設測完會清理)
-    ./test_lab.py s03 s04      只跑指定情境(以名稱前綴比對)
-只需要 python3(>=3.6)、docker 與 docker compose v2。
+    ./test_lab.py              启动环境、依序运行所有情境、输出 PASS/FAIL(任一 FAIL 则 exit 1)
+    ./test_lab.py --keep       测试后保留容器(缺省测完会清理)
+    ./test_lab.py s03 s04      只跑指定情境(以名称前缀比对)
+只需要 python3(>=3.6)、docker 与 docker compose v2。
 """
 import json
 import os
@@ -17,7 +17,7 @@ LAB = os.path.dirname(os.path.abspath(__file__))
 PE = "lab-pe"
 PEERS = ["172.30.1.2", "172.30.2.2", "172.30.3.2", "172.30.4.2"]  # r1 r2 r3 r4(iBGP)
 R1, R2, R3, R4 = PEERS
-TIMEOUT = 40  # 每個斷言最長輪詢秒數(收斂等待)
+TIMEOUT = 40  # 每个断言最长轮询秒数(收敛等待)
 
 results = []
 
@@ -31,7 +31,7 @@ def run(cmd, stdin=None, check=True):
 
 
 def vt(node, *cmds):
-    """在容器 lab-<node> 執行 vtysh -c ...,回傳文字輸出。"""
+    """在容器 lab-<node> 运行 vtysh -c ...,回传文本输出。"""
     args = ["docker", "exec", "lab-" + node if not node.startswith("lab-") else node, "vtysh"]
     for c in cmds:
         args += ["-c", c]
@@ -47,7 +47,7 @@ def vj(node, cmd):
 
 
 def paths(node, prefix):
-    """回傳某前綴在 node BGP 表中的所有 path(list of dict);沒有則 []。"""
+    """回传某前缀在 node BGP 表中的所有 path(list of dict);没有则 []。"""
     return vj(node, "show bgp ipv4 unicast %s json" % prefix).get("paths", [])
 
 
@@ -63,7 +63,7 @@ def apply_config(container, path):
 
 
 def wait_for(fn, timeout=TIMEOUT, interval=1.0):
-    """輪詢 fn() 直到回傳真值或逾時;例外視為未成功。"""
+    """轮询 fn() 直到回传真值或逾时;例外视为未成功。"""
     end = time.time() + timeout
     while True:
         try:
@@ -93,7 +93,7 @@ def load_pe(scn):
     wait_for(lambda: "bgpd" in vt(PE, "show daemons"), 20, 0.5)
     apply_config(PE, "scenarios/" + scn)
     if not wait_for(established, 60):
-        print("  [FAIL] 四個 BGP session 未在時限內 Established")
+        print("  [FAIL] 四个 BGP session 未在时限内 Established")
         results.append(False)
 
 
@@ -123,55 +123,55 @@ def best_peer(node, prefix):
 
 # ---------------------------------------------------------------- 情境
 def s00():
-    check("ebgp-requires-policy:r1/r2/r3 session Established 但 peerState=Policy、收 0 條",
+    check("ebgp-requires-policy:r1/r2/r3 session Established 但 peerState=Policy、收 0 条",
           lambda: all(vj(PE, "show bgp ipv4 unicast summary json")["peers"][ip]["peerState"] == "Policy"
                       and vj(PE, "show bgp ipv4 unicast summary json")["peers"][ip]["pfxRcd"] == 0
                       for ip in (R1, R2, R3)))
-    check("pe 的 BGP 表沒有 10.1.0.0/24", lambda: not has(PE, "10.1.0.0/24"))
-    check("r1 沒有收到 pe 任何路由(outbound 也被擋)", lambda: not has("r1", "20.0.0.0/24"))
+    check("pe 的 BGP 表没有 10.1.0.0/24", lambda: not has(PE, "10.1.0.0/24"))
+    check("r1 没有收到 pe 任何路由(outbound 也被挡)", lambda: not has("r1", "20.0.0.0/24"))
 
 
 def s01():
-    check("pe 收下 10.1.0.0/24 與 10.1.1.0/24",
+    check("pe 收下 10.1.0.0/24 与 10.1.1.0/24",
           lambda: has(PE, "10.1.0.0/24") and has(PE, "10.1.1.0/24"))
-    check("prefix-list deny:10.1.2.0/24 被過濾", lambda: not has(PE, "10.1.2.0/24"))
-    check("implicit deny:192.0.2.0/24 被過濾", lambda: not has(PE, "192.0.2.0/24"))
+    check("prefix-list deny:10.1.2.0/24 被过滤", lambda: not has(PE, "10.1.2.0/24"))
+    check("implicit deny:192.0.2.0/24 被过滤", lambda: not has(PE, "192.0.2.0/24"))
     recv = lambda: set(vj(PE, "show bgp ipv4 unicast neighbors %s received-routes json" % R1).get("receivedRoutes", {}))
-    check("soft-reconfiguration: received-routes 仍看得到 r1 送來的 4 條原始路由(含被過濾的)",
+    check("soft-reconfiguration: received-routes 仍看得到 r1 送来的 4 条原始路由(含被过滤的)",
           lambda: {"10.1.0.0/24", "10.1.1.0/24", "10.1.2.0/24", "192.0.2.0/24"} <= recv())
     check("outbound PERMIT-ALL:r2 收得到 10.1.0.0/24", lambda: has("r2", "10.1.0.0/24"))
-    # 線上修改 policy,再 clear soft in 刷新
+    # 在线修改 policy,再 clear soft in 刷新
     vt(PE, "configure terminal", "no ip prefix-list CUST-IN seq 5")
     vt(PE, "clear bgp ipv4 unicast %s soft in" % R1)
-    check("移除 deny 並 clear bgp soft in 後 10.1.2.0/24 出現", lambda: has(PE, "10.1.2.0/24"))
-    check("192.0.2.0/24 仍被過濾(不在 10.1.0.0/16 內)", lambda: not has(PE, "192.0.2.0/24"))
+    check("移除 deny 并 clear bgp soft in 后 10.1.2.0/24 出现", lambda: has(PE, "10.1.2.0/24"))
+    check("192.0.2.0/24 仍被过滤(不在 10.1.0.0/16 内)", lambda: not has(PE, "192.0.2.0/24"))
 
 
 def s02():
-    check("pe 收下 r2 的 20.0.0.0/24 與 30.0.0.0/24",
+    check("pe 收下 r2 的 20.0.0.0/24 与 30.0.0.0/24",
           lambda: has(PE, "20.0.0.0/24") and has(PE, "30.0.0.0/24"))
-    check("as-path 含 65099 的 20.0.1.0/24 被過濾(以 _65099_ 比對)", lambda: not has(PE, "20.0.1.0/24"))
+    check("as-path 含 65099 的 20.0.1.0/24 被过滤(以 _65099_ 比对)", lambda: not has(PE, "20.0.1.0/24"))
 
 
 def s03():
-    check("30.0.0.0/24 有兩條 path(r2、r3)", lambda: len(paths(PE, "30.0.0.0/24")) == 2)
-    check("來自 r3 的 path local-pref 被改成 200",
+    check("30.0.0.0/24 有两条 path(r2、r3)", lambda: len(paths(PE, "30.0.0.0/24")) == 2)
+    check("来自 r3 的 path local-pref 被改成 200",
           lambda: attr(PE, "30.0.0.0/24", "locPrf", R3) == 200)
-    check("來自 r2 的 path 維持預設 local-pref 100",
-          lambda: attr(PE, "30.0.0.0/24", "locPrf", R2) in (None, 100))  # eBGP 預設值不顯示於 JSON,等同 100
-    check("最佳路徑為 r3(selectionReason=Local Pref)",
+    check("来自 r2 的 path 维持缺省 local-pref 100",
+          lambda: attr(PE, "30.0.0.0/24", "locPrf", R2) in (None, 100))  # eBGP 默认值不显示于 JSON,等同 100
+    check("最佳路径为 r3(selectionReason=Local Pref)",
           lambda: best_peer(PE, "30.0.0.0/24") == R3 and best(PE, "30.0.0.0/24")["bestpath"]["selectionReason"] == "Local Pref")
-    check("local-pref 經 iBGP 傳給 r4(r4 看到 locPrf=200)",
+    check("local-pref 经 iBGP 传给 r4(r4 看到 locPrf=200)",
           lambda: attr("r4", "40.0.0.0/24", "locPrf") == 200)
-    check("未做 next-hop-self:r4 無法解析 next-hop,路由不進 RIB",
+    check("未做 next-hop-self:r4 无法解析 next-hop,路由不进 RIB",
           lambda: not attr("r4", "40.0.0.0/24", "valid") and "40.0.0.0/24" not in vt("r4", "show ip route bgp"))
 
 
 def s04():
-    check("30.0.0.0/24 有兩條 path", lambda: len(paths(PE, "30.0.0.0/24")) == 2)
+    check("30.0.0.0/24 有两条 path", lambda: len(paths(PE, "30.0.0.0/24")) == 2)
     check("r2 path weight=100", lambda: attr(PE, "30.0.0.0/24", "weight", R2) == 100)
     check("r3 path local-pref=200", lambda: attr(PE, "30.0.0.0/24", "locPrf", R3) == 200)
-    check("weight 優先於 local-pref:最佳路徑切換成 r2",
+    check("weight 优先于 local-pref:最佳路径切换成 r2",
           lambda: best_peer(PE, "30.0.0.0/24") == R2 and best(PE, "30.0.0.0/24")["bestpath"]["selectionReason"] == "Weight")
 
 
@@ -180,49 +180,49 @@ def s05():
           lambda: has(PE, "10.1.0.0/24") and attr("r2", "10.1.0.0/24", "metric") == 50)
     check("outbound prepend:r3 看到 AS-path '65000 65000 65000 65001'",
           lambda: aspath("r3", "10.1.0.0/24") == "65000 65000 65000 65001")
-    check("r2 的 AS-path 沒被 prepend('65000 65001')", lambda: aspath("r2", "10.1.0.0/24") == "65000 65001")
+    check("r2 的 AS-path 没被 prepend('65000 65001')", lambda: aspath("r2", "10.1.0.0/24") == "65000 65001")
 
 
 def s06():
-    check("10.1.0.0/24 在 pe 被標 community 65000:100 與 large-community 65000:1:100",
+    check("10.1.0.0/24 在 pe 被标 community 65000:100 与 large-community 65000:1:100",
           lambda: comm(PE, "10.1.0.0/24") == "65000:100" and comm(PE, "10.1.0.0/24", "largeCommunity") == "65000:1:100")
-    check("10.1.1.0/24 被標 community 65000:200", lambda: comm(PE, "10.1.1.0/24") == "65000:200")
+    check("10.1.1.0/24 被标 community 65000:200", lambda: comm(PE, "10.1.1.0/24") == "65000:200")
     check("outbound community-list:r2 只收到 GOLD(10.1.0.0/24)且保留 community",
           lambda: comm("r2", "10.1.0.0/24") == "65000:100")
-    check("r2 沒有 10.1.1.0/24、10.1.2.0/24", lambda: not has("r2", "10.1.1.0/24") and not has("r2", "10.1.2.0/24"))
+    check("r2 没有 10.1.1.0/24、10.1.2.0/24", lambda: not has("r2", "10.1.1.0/24") and not has("r2", "10.1.2.0/24"))
     check("r3 收到 SILVER 路由且被加上 no-export",
           lambda: comm("r3", "10.1.1.0/24") == "65000:200 no-export")
-    check("r3 沒有 GOLD 路由 10.1.0.0/24", lambda: not has("r3", "10.1.0.0/24"))
+    check("r3 没有 GOLD 路由 10.1.0.0/24", lambda: not has("r3", "10.1.0.0/24"))
 
 
 def s07():
     check("seq 10 命中:10.1.0.0/24 有 community 65000:100", lambda: comm(PE, "10.1.0.0/24") == "65000:100")
-    check("continue 20:10.1.0.0/24 同時套用 seq 20 的 local-pref 150",
+    check("continue 20:10.1.0.0/24 同时套用 seq 20 的 local-pref 150",
           lambda: attr(PE, "10.1.0.0/24", "locPrf") == 150)
-    check("seq 10 未命中:10.1.1.0/24 沒有 community 但有 local-pref 150",
+    check("seq 10 未命中:10.1.1.0/24 没有 community 但有 local-pref 150",
           lambda: comm(PE, "10.1.1.0/24") == "" and attr(PE, "10.1.1.0/24", "locPrf") == 150)
 
 
 def s08():
-    check("next-hop-self:r4 的 40.0.0.0/24 next-hop 變成 pe(172.30.4.3)",
+    check("next-hop-self:r4 的 40.0.0.0/24 next-hop 变成 pe(172.30.4.3)",
           lambda: vj("r4", "show ip route 40.0.0.0/24 json").get("40.0.0.0/24", [{}])[0]
           .get("nexthops", [{}])[0].get("ip") == "172.30.4.3")
-    check("r4 的路由保有 local-pref 200 並進入 RIB",
+    check("r4 的路由保有 local-pref 200 并进入 RIB",
           lambda: attr("r4", "40.0.0.0/24", "locPrf") == 200 and attr("r4", "40.0.0.0/24", "valid") is True)
 
 
 def s09():
-    check("route-map 未定義:r1 session 起來但 pe 收 0 條",
+    check("route-map 未定义:r1 session 起来但 pe 收 0 条",
           lambda: vj(PE, "show bgp ipv4 unicast summary json")["peers"][R1]["pfxRcd"] == 0 and not has(PE, "10.1.0.0/24"))
-    check("route-map 未定義:r2/r3 因 ebgp-requires-policy 仍是 Policy",
+    check("route-map 未定义:r2/r3 因 ebgp-requires-policy 仍是 Policy",
           lambda: vj(PE, "show bgp ipv4 unicast summary json")["peers"][R2]["peerState"] == "Policy")
     check("show route-map 查不到 NO-SUCH-MAP", lambda: "NO-SUCH-MAP" not in vt(PE, "show route-map"))
 
 
 def s10():
-    check("no bgp ebgp-requires-policy:無 policy 也收到所有路由",
+    check("no bgp ebgp-requires-policy:无 policy 也收到所有路由",
           lambda: all(has(PE, p) for p in ("10.1.0.0/24", "10.1.2.0/24", "192.0.2.0/24", "20.0.1.0/24", "40.0.0.0/24")))
-    check("20.0.1.0/24 的 AS-path 為 '65002 65099 65088'", lambda: aspath(PE, "20.0.1.0/24") == "65002 65099 65088")
+    check("20.0.1.0/24 的 AS-path 为 '65002 65099 65088'", lambda: aspath(PE, "20.0.1.0/24") == "65002 65099 65088")
 
 
 SCENARIOS = [
@@ -236,7 +236,7 @@ SCENARIOS = [
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     keep = "--keep" in sys.argv
-    print("== 啟動環境 ==")
+    print("== 启动环境 ==")
     run(["docker", "compose", "up", "-d"])
     try:
         for r in ("r1", "r2", "r3", "r4"):
@@ -250,10 +250,10 @@ def main():
             fn()
     finally:
         if not keep:
-            print("== 清理環境 ==")
+            print("== 清理环境 ==")
             run(["docker", "compose", "down", "-v", "--remove-orphans"], check=False)
     passed, total = sum(results), len(results)
-    print("\n結果:%d/%d PASS" % (passed, total))
+    print("\n结果:%d/%d PASS" % (passed, total))
     print("ALL PASS" if passed == total and total else "FAILED")
     sys.exit(0 if passed == total and total else 1)
 

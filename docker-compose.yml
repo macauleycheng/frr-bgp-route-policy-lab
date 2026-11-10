@@ -1,5 +1,5 @@
-# BGP route policy lab:pe 為套用 policy 的節點,r1~r3 為 eBGP 對等,r4 為 iBGP 對等
-# 所有 link 都是 internal network(不連外、不影響主機路由)
+# BGP route policy lab:pe 为套用 policy 的节点,r1~r3 为 eBGP 对等,r4 为 iBGP 对等
+# 所有 link 都是 internal network(不连外、不影响主机路由)
 name: frr-bgp-policy-lab
 x-router: &router
   image: frrouting/frr:v8.4.1
